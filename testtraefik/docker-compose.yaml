@@ -1,0 +1,133 @@
+version: '3'
+
+services:
+  opensearch:
+    image: opensearchproject/opensearch:2.11.0
+    container_name: opensearch
+    environment:
+      - cluster.name=opensearch-cluster # Name the cluster
+      - node.name=opensearch # Name the node that will run in this container
+      - discovery.seed_hosts=opensearch # Nodes to look for when discovering the cluster
+      - cluster.initial_cluster_manager_nodes=opensearch # Nodes eligibile to serve as cluster manager
+      - bootstrap.memory_lock=true # Disable JVM heap memory swapping
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m" # Set min and max JVM heap sizes to at least 50% of system RAM
+      - "DISABLE_INSTALL_DEMO_CONFIG=true" # Prevents execution of bundled demo script which installs demo certificates and security configurations to OpenSearch
+      - "DISABLE_SECURITY_PLUGIN=true" # Disables security plugin
+    ulimits:
+      memlock:
+        soft: -1 # Set memlock to unlimited (no soft or hard limit)
+        hard: -1
+      nofile:
+        soft: 65536 # Maximum number of open files for the opensearch user - set to at least 65536
+        hard: 65536
+    volumes:
+      - opensearch:/usr/share/opensearch/data # Creates volume called opensearch-data1 and mounts it to the container
+    ports:
+      - 9200:9200
+      - 9600:9600
+    expose:
+      - "9200"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9200/_cluster/health?wait_for_status=yellow"]
+      interval: 5s
+      timeout: 25s
+      retries: 4
+    networks:
+      - opensearch-net # All of the containers will join the same Docker bridge network
+  opensearch-dashboards:
+    image: charithapothugunta/dashboard-observability:latest
+    container_name: dashboards
+    ports:
+      - 5601:5601 # Map host port 5601 to container port 5601
+    expose:
+      - "5601" # Expose port 5601 for web access to OpenSearch Dashboards
+    environment:
+      - 'OPENSEARCH_HOSTS=["http://opensearch:9200"]'
+      - "DISABLE_SECURITY_DASHBOARDS_PLUGIN=true" # disables security dashboards plugin in OpenSearch Dashboards
+    depends_on:
+      - opensearch
+    networks:
+      - opensearch-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboards.rule=Host(`localhost`)"
+      - "traefik.http.routers.dashboards.entrypoints=web"
+      - "traefik.http.routers.dashboards.middlewares=port-5601"
+  fluentbit:
+    container_name: fluentbit1
+    image: fluent/fluent-bit:latest
+    volumes:
+      - ./fluent-bit:/fluent-bit/etc
+    ports:
+      - "24224:24224"
+      - "24224:24224/udp"
+    depends_on:
+      - opensearch
+    networks:
+      - opensearch-net
+  redis:
+    image: redis
+    ports:
+      - 6357:6357
+    networks:
+      - opensearch-net
+  flask-app:
+    build: flask-app
+    ports:
+      - 5000:5000
+    depends_on:
+      - redis
+    volumes:
+      - ./flask-app/app.py:/code/app.py
+    networks:
+      - opensearch-net
+  proxy:
+    # The official v3 Traefik docker image
+    image: traefik:v3.1
+    container_name: traefik
+    # Enables the web UI and tells Traefik to listen to docker
+    command: 
+      - "--api.insecure=true"
+      - "--providers.docker"
+      - "--entrypoints.web.address=:80"
+      - "--log.level=INFO"  # Set log level
+      - "--accesslog=true"  # Enable access logs
+      - "--accesslog.filepath=/var/log/traefik/access.log"  # Path to the access log file
+      - "--accesslog.bufferingsize=100"  
+      - "--accesslog.addInternals=true" 
+    ports:
+      # The HTTP port
+      - "80:80"
+      # The Web UI (enabled by --api.insecure=true)
+      - "8080:8080"
+    volumes:
+      # So that Traefik can listen to the Docker events
+      - /var/run/docker.sock:/var/run/docker.sock
+      - "./traefik_logs:/var/log/traefik"
+    depends_on:
+      - flask-app
+      - fluentbit
+    networks:
+      - opensearch-net
+    links:
+      - fluentbit
+    logging:
+      driver: "fluentd"
+      options:
+        fluentd-address: 127.0.0.1:24224
+        tag: traefik.access
+
+  nginx:
+    image: nginx:latest
+    container_name: nginx
+    labels:
+      - "traefik.http.routers.nginx.rule=Host(`nginx.localhost`)"
+      - "traefik.http.routers.nginx.entrypoints=web"
+    networks:
+      - opensearch-net
+
+volumes:
+  opensearch:
+
+networks:
+  opensearch-net:

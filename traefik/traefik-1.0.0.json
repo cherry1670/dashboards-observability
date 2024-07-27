@@ -1,0 +1,50 @@
+{
+    "name": "traefik",
+    "version": "1.0.0",
+    "displayName": "traefik Dashboard",
+    "description": "traefik web logs collector",
+    "license": "Apache-2.0",
+    "type": "logs",
+    "labels": ["Observability", "Logs"],
+    "author": "OpenSearch",
+    "sourceUrl": "https://github.com/opensearch-project/dashboards-observability/tree/main/server/adaptors/integrations/__data__/repository/haproxy/info",
+    "statics": {
+        "logo": {
+          "annotation": "traefik Logo",
+          "path": "logo.svg"
+        },
+        "gallery": [
+          {
+            "annotation": "traefik Dashboard",
+            "path": "dashboard1.png"
+          },
+          {
+            "annotation": "traefik Dashboard view",
+            "path": "dashboard2.png"
+          }
+        ]
+      },
+    "components": [
+      {
+        "name": "communication",
+        "version": "1.0.0"
+      },
+      {
+        "name": "http",
+        "version": "1.0.0"
+      },
+      {
+        "name": "logs",
+        "version": "1.0.0"
+      }
+    ],
+    "assets": {
+      "savedObjects": {
+        "name": "traefik",
+        "version": "1.0.0"
+      }
+    },
+    "sampleData": {
+      "path": "sample.json"
+    }
+  }
